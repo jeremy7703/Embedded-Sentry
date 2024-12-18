@@ -1,8 +1,9 @@
+// We would like to thank for the 
+
 #include "mbed.h"
 #include <vector>
 #include "drivers/LCD_DISCO_F429ZI.h"
 #include "drivers/TS_DISCO_F429ZI.h"
-//#include "dtw_utils.h"
 #include <iostream>
 #include <cmath>
 
@@ -30,7 +31,7 @@
 #define DATA_READY_FLAG 2
 #define LEARNING_FLAG 4
 #define UNLOCK_FLAG 8
-#define ERASE_FLAG 16
+#define RESET_FLAG 16
 
 // Scaling Factor for data conversion dps --> rps (make sure its the right vale?!)
 #define SCALING_FACTOR (17.5f * 0.0174532925199432957692236907684886f / 1000.0f)
@@ -82,6 +83,7 @@ const int text_y = 300;
 const char *text_0 = "NO KEY RECORDED";
 const char *text_1 = "LOCKED";
 
+// Array to store 2 (X,Y,Z Gyroscope) Data Sequences
 float tr_accx[30];
 float tr_accy[30];
 float tr_accz[30];
@@ -90,10 +92,10 @@ float te_accx[30];
 float te_accy[30];
 float te_accz[30];
 
+// Index to tell the gyro_read where to store the readings
 bool mode = false;
 
-std::pair<std::vector<float>, std::pair<std::vector<float>, std::vector<float>>> result;
-
+// Initialize the function that will be used
 void display();
 void main_thread();
 void touch_screen_thread();
@@ -120,17 +122,17 @@ void data_cb() {
 float window_gx[WINDOW_SIZE] = {0}, window_gy[WINDOW_SIZE] = {0}, window_gz[WINDOW_SIZE] = {0};
 int window_index = 0;
 
-// Set Flags for interuppt: data_ready/button pressed
+// Callback function: Set Flags for interuppt: data_ready/button pressed
 void button_press()
 {
-    flags.set(ERASE_FLAG);
+    flags.set(RESET_FLAG);
 }
 void onGyroDataReady()
 {
     flags.set(DATA_READY_FLAG);
 }
 
-
+// Display Infos
 void display(char* display_buffer){
 
             const int text_x = 5;
@@ -141,12 +143,14 @@ void display(char* display_buffer){
             lcd.DisplayStringAt(text_x, text_y, (uint8_t *)display_buffer, CENTER_MODE);
 }
 
+//Decide if a touch screen is inside a button
 bool is_touch_inside_button(int touch_x, int touch_y, int button_x, int button_y, int button_width, int button_height)
 {
     return (touch_x >= button_x && touch_x <= button_x + button_width &&
             touch_y >= button_y && touch_y <= button_y + button_height);
 }
 
+//Draw button on the screen
 void draw_button(int x, int y, int width, int height, const char *label)
 {
     lcd.SetTextColor(0xff800080);
@@ -162,6 +166,7 @@ void draw_button(int x, int y, int width, int height, const char *label)
     } 
 }
 
+// Calculate the min of 3 elements for DTW
 float MIN(float &a, float &b ,float &c){
   if (a < b){
     if (a < c)return a;
@@ -173,10 +178,12 @@ float MIN(float &a, float &b ,float &c){
   }
 }
 
+// Calculate the Norm for 3-dims data (used in DTW)
 float NORM( float dx, float dy, float dz){
   return sqrt(dx*dx + dy*dy + dz*dz);
 }
 
+// Calculate the DTW threshold(the similarity threshold between 2 sequences of gesture data)
 float DTW_THRESHOLD() {
     // Display initial message
     sprintf(display_buffer, "DTW...");
@@ -263,124 +270,7 @@ float DTW_THRESHOLD() {
     return mean / n;
 }
 
-// float DTW_THRESHOLD() {
-
-//     sprintf(display_buffer, "DTW...");
-//     display(display_buffer);
-//     float scale = 0.5;
-//     float dir = 0;
-//     float DTW[30][30];
-//     float dx = 0;
-//     float dy = 0;
-//     float dz = 0;
-//     //------------process boundary:--------------
-//     for(int8_t i = 0 ; i < 30 ; i++){
-
-//       if (i == 0){
-//         dx = tr_accx[i] - te_accx[i];
-//         dy = tr_accy[i] - te_accy[i];
-//         dz = tr_accz[i] - te_accz[i];
-//         dir = (tr_accx[i]*te_accx[i] + tr_accy[i]*te_accy[i] + tr_accz[i]*te_accz[i])/ ( NORM(tr_accx[i],tr_accy[i],tr_accz[i])* NORM(te_accx[i],te_accy[i],te_accz[i]) + 0.0000001);
-//         DTW[i][i] = (1-scale*dir) * NORM(dx,dy,dz);  
-//       }
-//       else{
-//         dx = tr_accx[i] - te_accx[0];
-//         dy = tr_accy[i] - te_accy[0];
-//         dz = tr_accz[i] - te_accz[0];
-//         dir = (tr_accx[i]*te_accx[0] + tr_accy[i]*te_accy[0] + tr_accz[i]*te_accz[0])/ ( NORM(tr_accx[i],tr_accy[i],tr_accz[i])* NORM(te_accx[0],te_accy[0],te_accz[0]) + 0.0000001);
-//         DTW[i][0] = (1-scale*dir) * NORM(dx,dy,dz) + DTW[i-1][0];
-
-//         dx = tr_accx[0] - te_accx[i];
-//         dy = tr_accy[0] - te_accy[i];
-//         dz = tr_accz[0] - te_accz[i];
-//         dir = (tr_accx[0]*te_accx[i] + tr_accy[0]*te_accy[i] + tr_accz[0]*te_accz[i])/ ( NORM(tr_accx[0],tr_accy[0],tr_accz[0])* NORM(te_accx[i],te_accy[i],te_accz[i]) + 0.0000001);
-//         DTW[0][i] = (1-scale*dir) * NORM(dx,dy,dz) + DTW[0][i-1];
-//       }
-//       sprintf(display_buffer, "process boundary");
-//       display(display_buffer);
-      
-//     }
-
-//     //---------------computing:-----------------
-//     for(int8_t i = 1 ; i < 30 ; i++){
-//       for(int8_t j = 1 ; j < 30 ; j++){
-//         dx = tr_accx[i] - te_accx[j];
-//         dy = tr_accy[i] - te_accy[j];
-//         dz = tr_accz[i] - te_accz[j];
-
-//         dir = (tr_accx[i]*te_accx[j] + tr_accy[i]*te_accy[j] + tr_accz[i]*te_accz[j])/ ( NORM(tr_accx[i],tr_accy[i],tr_accz[i])* NORM(te_accx[j],te_accy[j],te_accz[j]) + 0.0000001);  
-//         DTW[i][j] = (1-scale*dir) * NORM(dx,dy,dz) + MIN(DTW[i-1][ j  ],DTW[i  ][ j-1],DTW[i-1][ j-1]);    
-  
-//       }
-//       sprintf(display_buffer, "computing!");
-//       display(display_buffer);
-//     }
-
-//     int8_t i = 29;
-//     int8_t j = 29;
-//     int8_t count = 0;
-//     float d[60];
-//     while(true){
-//       if(i>0 && j>0){
-//         float m = MIN(DTW[i-1][ j  ],DTW[i  ][ j-1],DTW[i-1][ j-1]);
-//         if(m == DTW[i-1][j-1]){
-//           d[count] = DTW[i][j] - DTW[i-1][j-1];
-//           i = i-1;
-//           j = j-1;
-//           count++;
-//         }
-//         else if(m == DTW[i][j-1]){
-//           d[count] = DTW[i][j] - DTW[i][j-1];
-//           j = j-1;
-//           count++;
-//         }
-//         else if(m == DTW[i-1][ j  ]){
-//           d[count] = DTW[i][j] - DTW[i-1][j];
-//           i = i-1;
-//           count++;
-//         }
-//       }
-//       else if(i == 0 && j == 0){
-//         d[count] = DTW[i][j];
-//         count++;
-//         break;
-//       }
-//       else if(i == 0){
-//         d[count] = DTW[i][j] - DTW[i][j-1];
-//         j = j-1;
-//         count++;
-//       }
-//       else if(j == 0){
-//         d[count] = DTW[i][j] - DTW[i-1][j];
-//         i = i-1;
-//         count++;
-//       }
-//     }
-//     //Serial.print("Back track finished, ");Serial.print(count);Serial.println(" steps used in back track");
-// //    uncomment to enable this:   
-// //    limit repeated matching points in bakc track route when testing, good for reject wrong guesture but affect right gesture a little some time  
-// //    if (mode >= 7 && count > 62){ 
-// //      Serial.println("Back track constraint violated!!");
-// //      return -1;
-// //    }
-//     //---------------compute variance-----------------
-//     //Serial.println("Cost function computation start");
-// //    delay(1000);
-//     float mean = 0;
-//     for (int i = 0 ; i < count ; i++){
-// //      Serial.print("The ");Serial.print(i);Serial.print(" difference: ");Serial.println(d[i]);
-//       mean += d[i];
-//     }
-//     mean = mean / count;
-// //    float variance = 0;
-// //    for (int i = 0 ; i < count ; i++){
-// //      variance += (d[i]-mean)*(d[i]-mean)/count;
-// //    }
-//     // Serial.print("Threshold is: ");Serial.println(threshold);
-//     // Serial.print("Cost function value: ");Serial.println(mean);
-//     return mean;
-// }
-
+// Display Main Menu
 void main_UI(){
     
     lcd.Clear(LCD_COLOR_BLACK);
@@ -396,6 +286,7 @@ void main_UI(){
     draw_button(button2_x, button2_y, button2_width, button2_height, button2_label);
 }
 
+// Display unlock animation smile face
 void draw_unlock(){
 
     // Clear the screen and set the background color
@@ -441,6 +332,55 @@ void draw_unlock(){
     }
 }
 
+// Display unlock animation sad face
+
+
+void draw_unlock_fail() {
+    // Clear the screen and set the background color
+    lcd.Clear(LCD_COLOR_BLACK);
+
+    // Draw the face (yellow circle)
+    lcd.SetTextColor(LCD_COLOR_YELLOW);
+    lcd.FillCircle(120, 120, 80);
+
+    // Draw the eyes (small black circles)
+    lcd.SetTextColor(LCD_COLOR_BLACK);
+    lcd.FillCircle(95, 100, 10);  // Left eye
+    lcd.FillCircle(145, 100, 10); // Right eye
+
+    // Draw the frown (red arc)
+    lcd.SetTextColor(LCD_COLOR_RED);
+
+    // Arc parameters for a frown
+    int centerX = 120;  // Center of the face
+    int centerY = 80;  // Slightly below the center for the smile
+    int radius = 50;    // Radius of the frown
+    int startAngle = -30;  // Start of the arc (in degrees)
+    int endAngle = -150;   // End of the arc (in degrees)
+
+    for (int angle = startAngle; angle <= endAngle; angle++) {
+        // Convert angle to radians
+        float rad = angle * PI / 180;
+
+        // Calculate the arc's points
+        int x = centerX + radius * cos(rad);
+        int y = centerY + radius * sin(rad);
+
+        // Draw each point on the arc
+        lcd.DrawPixel(x, y, LCD_COLOR_RED);
+    }
+
+    auto start_time = std::chrono::high_resolution_clock::now();
+
+    while (1) {
+        thread_sleep_for(1000);  // Empty Loop
+        if (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now() - start_time).count() >= 0.5) {
+                return;}
+    }
+}
+
+
+// Display loading animation
 void loading_screen(){
 
     // Clear the screen
@@ -480,6 +420,7 @@ void loading_screen(){
     }
 }
 
+
 int main() {
 
     main_UI();
@@ -501,6 +442,7 @@ int main() {
 
     }
 
+// Function to read the gyroscope data
 void read_gyro() {
 
     // SPI
@@ -591,37 +533,69 @@ void read_gyro() {
     }
 }
 
+
+// Training a gesture
 void  training_phase(){
+    if(!key){
+        sprintf(display_buffer, "Training Phase!");
+        display(display_buffer);
+        ThisThread::sleep_for(500ms);
+        sprintf(display_buffer, "Start in 2s");
+        display(display_buffer);
+        ThisThread::sleep_for(1s);
+        sprintf(display_buffer, "Start in 1s");
+        display(display_buffer);
+        ThisThread::sleep_for(1s);
+        
+        mode = true; // record reference gesture (#1)
 
-    sprintf(display_buffer, "Training Started!");
-    display(display_buffer);
-    mode = true;
-    read_gyro();
-    // tr_accx = result.first;
-    // tr_accy  = result.second.first;
-    // tr_accz  = result.second.second;
+        sprintf(display_buffer, "Recording !!!");
+        display(display_buffer);
+        read_gyro();
+        sprintf(display_buffer, "Record Finished!");
+        display(display_buffer);
+        ThisThread::sleep_for(500ms);
+        // tr_accx = result.first;
+        // tr_accy  = result.second.first;
+        // tr_accz  = result.second.second;
 
-    sprintf(display_buffer, "Repeat Gesture!");
-    display(display_buffer);
-    mode = false;
-    read_gyro();
-    // auto result2 = read_gyro();
-    // te_accx = result2.first;
-    // te_accy  = result2.second.first;
-    // te_accz  = result2.second.second;
-    loading_screen();
-    sprintf(display_buffer, "Computing!!");
-    display(display_buffer);
-    threshold = DTW_THRESHOLD();
-    //print learning completed
-    main_UI();
-    sprintf(display_buffer, "Learning Completed!");
-    display(display_buffer);
-    key = true;
+        sprintf(display_buffer, "Repeat Gesture!");
+        display(display_buffer);
+        ThisThread::sleep_for(500ms);
+        sprintf(display_buffer, "Start in 2s");
+        display(display_buffer);
+        ThisThread::sleep_for(1s);
+        sprintf(display_buffer, "Start in 1s");
+        display(display_buffer);
+        ThisThread::sleep_for(1s);
+        sprintf(display_buffer, "Recording !!!");
+        display(display_buffer);
+        mode = false; //record gesture #2
+
+        read_gyro();
+        sprintf(display_buffer, "Repeat Finished!");
+        display(display_buffer);
+        // auto result2 = read_gyro();
+        // te_accx = result2.first;
+        // te_accy  = result2.second.first;
+        // te_accz  = result2.second.second;
+        sprintf(display_buffer, "Computing!!");
+        display(display_buffer);
+        loading_screen();
+        threshold = DTW_THRESHOLD(); 
+        //print learning completed
+        main_UI();
+        sprintf(display_buffer, "Learning Completed!");
+        display(display_buffer);
+        key = true;
+    }else{
+        return;
+    }
 }
 
+// Unlocking
 void unlocking_phase(){
-
+    flags.clear(UNLOCK_FLAG);
     if(key){
 
         // tr_accx = result.first;
@@ -632,62 +606,92 @@ void unlocking_phase(){
         // te_accx = result2.first;
         // te_accy  = result2.second.first;
         // te_accz  = result2.second.second;
+        // remind user start recording gesture in 1s!
+        sprintf(display_buffer, "Unlock Phase!");
+        display(display_buffer);
+        ThisThread::sleep_for(500ms);
+        sprintf(display_buffer, "Start in 2s");
+        display(display_buffer);
+        ThisThread::sleep_for(1s);
+        sprintf(display_buffer, "Start in 1s");
+        display(display_buffer);
+        ThisThread::sleep_for(1s);
         mode = false;
+        sprintf(display_buffer, "Recording !!!");
+        display(display_buffer);
         read_gyro();
+        sprintf(display_buffer, "Record Finished!");
+        display(display_buffer);
+        sprintf(display_buffer, "Computing!!");
+        display(display_buffer);
+        loading_screen();
         float var = DTW_THRESHOLD();
 
         if ( (var >= 0 && var <= threshold + 5) ) {
 
-            //print(recognition succeed_
             draw_unlock();
             sprintf(display_buffer, "UNLOCK: SUCCESS!");
             display(display_buffer);
-            thread_sleep_for(500);
+            thread_sleep_for(1000);
             main_UI();
 
 
         }else{
+            draw_unlock_fail();
             sprintf(display_buffer, "UNLOCK: FAILED!");
             display(display_buffer);
+            thread_sleep_for(1000);
+            main_UI();
         }
     }else{
-        sprintf(display_buffer, "Please set a key first!");
+        sprintf(display_buffer, "Please set a key!");
         display(display_buffer);
     }
 }
 
+// Reset key(gesture)
 void reset_key(){
     if(key){
         key = false; // Removed key
-        sprintf(display_buffer, "Key has been reset!");
+        sprintf(display_buffer, "Key removed!");
         display(display_buffer);
+        thread_sleep_for(250);
+        key = false;
     }else{
-        sprintf(display_buffer, "Please set a key first!");
+        sprintf(display_buffer, "Please set a key!");
         display(display_buffer);
+        thread_sleep_for(250);
     }
 }
+
+// Main thread(train, unlock, reset key)
 void main_thread(){
     
     while(1){
-        auto flag_check = flags.wait_any(LEARNING_FLAG | UNLOCK_FLAG | ERASE_FLAG);
+        auto flag_check = flags.wait_any(LEARNING_FLAG | UNLOCK_FLAG | RESET_FLAG);
 
         if(flag_check & LEARNING_FLAG){
+            flags.clear(LEARNING_FLAG);
             training_phase();
+
         }else if(flag_check & UNLOCK_FLAG){
+            flags.clear(UNLOCK_FLAG);
             unlocking_phase();
-        }else if(flag_check & ERASE_FLAG){
+        }else if(flag_check & RESET_FLAG & key){
+            flags.clear(RESET_FLAG);
             reset_key();
         }else{
-            //print(data not ready,please wait for initialization ...)
+            sprintf(display_buffer, "Please set a key!");
+            display(display_buffer);
         }
 
-        ThisThread::sleep_for(100ms);
+        ThisThread::sleep_for(500ms);
     }
 
 }
 
 
-
+// Touch screen thread
 void touch_screen_thread()
 {   
     // Add your touch screen initialization and handling code here
@@ -711,10 +715,9 @@ void touch_screen_thread()
             int touch_y = ts_state.Y;
 
             if (is_touch_inside_button(touch_x, touch_y, dark_x, dark_y, 190, dark_height)){
-                sprintf(display_buffer, "Unlocking Initiated...");
-                display(display_buffer);
-                ThisThread::sleep_for(1s);
+
                 flags.set(UNLOCK_FLAG);
+
             }
 
             // if (is_touch_inside_button(touch_x, touch_y, light_x, light_y, light_width, light_height)){
@@ -755,9 +758,6 @@ void touch_screen_thread()
             // Check if the touch is inside unlock button
             if (is_touch_inside_button(touch_x, touch_y, button1_x, button1_y, button2_width, button2_height))
             {
-                sprintf(display_buffer, "Recording Initiated...");
-                display(display_buffer);
-                ThisThread::sleep_for(1s);
                 flags.set(LEARNING_FLAG);
             }
         }
